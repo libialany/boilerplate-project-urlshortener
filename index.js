@@ -4,24 +4,39 @@ const cors = require('cors');
 const app = express();
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const autoIncrement = require('mongoose-auto-increment');
 // Basic Configuration
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use('/public', express.static(`${process.cwd()}/public`));
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/views/index.html')
+});
 const dns = require('dns');
 const URL = require('url').URL;
 //============================================================
-var connection = mongoose.createConnection(process.env.DB_URL);
-autoIncrement.initialize(connection);
+const connectDB = async () => {
+  try {
+    // await mongoose.connect(process.env['DB_URL'], {
+    await mongoose.connect(process.env['DB_URL'], {
+      useUnifiedTopology: true,
+      useNewUrlParser: true
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+connectDB();
+//============================================================
 const Schema = mongoose.Schema;
-// Urls
-const urlSchema = new Schema({
-  original_url: { type: String, required: true }
+
+// User
+const UrlsSchema = new Schema({
+  original_url: { type: String, required: true },
+  short_url: { type: String, required: true }
 })
-urlSchema.plugin(autoIncrement.plugin, { model: 'Url', field: 'short_url' })
-let Urls = connection.model('Url', urlSchema)
+
+let Urls = mongoose.model('Urls', UrlsSchema)
 //============================================================
 const isValidUrl = urlString => {
   var urlPattern = new RegExp('^(https?:\\/\\/)?' + // validate protocol
@@ -32,13 +47,13 @@ const isValidUrl = urlString => {
     '(\\#[-a-z\\d_]*)?$', 'i'); // validate fragment locator
   return !!urlPattern.test(urlString);
 }
-app.get('/api/shorturl/:url', async (req, res)=> {
+app.get('/api/shorturl/:url', async (req, res) => {
   const { url } = req.params;
   if (!url) {
     return res.json({ error: 'invalid url' })
   }
   const findUrl = await Urls.findOne({ short_url: url }).select(['-_id', '-__v']).lean()
-  if (!findUrl){
+  if (!findUrl) {
     return res.json({ error: 'invalid url' })
   }
   res.redirect(findUrl.original_url)
@@ -57,7 +72,7 @@ app.post('/api/shorturl', async (req, res) => {
           short_url: "invalid URL"
         })
       } else {
-        let newUrl = await Urls.create({ original_url: url });
+        let newUrl = await Urls.create({ original_url: url, short_url: Math.floor(Math.random() * 100000).toString() });
         res.json(
           {
             original_url: url,
@@ -71,13 +86,8 @@ app.post('/api/shorturl', async (req, res) => {
     return res.json({ error: 'invalid url' })
   }
 });
-app.get('/a', async (req, res) => {
-  const ans = await Urls.find().exec()
-  console.log(ans);
-  res.send({})
-});
-
-connection.once('open', () => {
+const PORT = 4000
+mongoose.connection.once('open', () => {
   console.log('Connection to MongooseDB');
-  app.listen(4000 || process.env.PORT, () => console.log(`Server running on port http://localhost:4000`));
+  app.listen(PORT || process.env.PORT, () => console.log(`Server running on port http://localhost:${PORT}`));
 })
